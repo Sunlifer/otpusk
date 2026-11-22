@@ -655,6 +655,43 @@ function curGroup(){
   return S.groups.filter(function(g){return g.id===S.group;})[0]||S.groups[0];
 }
 
+/* ── защита от дублей ────────────────────────────────── */
+function normName(s){ return String(s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+/* одинаковое ФИО в одной группе: пустые копии склеиваем с тем, у кого есть дни.
+   Если дни есть у обоих — не трогаем (это разные люди или ручная правка). */
+function dedupePeople(st){
+  st=st||S;
+  var res={merges:0,dropIds:[]};
+  if(!st||!Array.isArray(st.employees)) return res;
+  var byName={};
+  st.employees.forEach(function(e){
+    var k=(e.g||'g1')+'|'+normName(e.name);
+    (byName[k]=byName[k]||[]).push(e);
+  });
+  Object.keys(byName).forEach(function(k){
+    var list=byName[k];
+    if(list.length<2) return;
+    list.sort(function(a,b){
+      if(b.days.size!==a.days.size) return b.days.size-a.days.size;
+      var ca=/^e\d+$/.test(a.id)?0:1, cb=/^e\d+$/.test(b.id)?0:1;
+      if(ca!==cb) return ca-cb;
+      return a.id<b.id?-1:1;
+    });
+    var keep=list[0];
+    for(var i=1;i<list.length;i++){
+      var lose=list[i];
+      if(lose.days.size) continue;
+      lose.days.forEach(function(x){ keep.days.add(x); });
+      res.dropIds.push(lose.id);
+      res.merges++;
+    }
+  });
+  if(res.dropIds.length){
+    st.employees=st.employees.filter(function(x){ return res.dropIds.indexOf(x.id)<0; });
+    if(st.employees.some(function(e){return e.id===st.active;})===false) st.active=(st.employees[0]&&st.employees[0].id)||null;
+  }
+  return res;
+}
 function activeEmp(){
   if(!S) return null;
   var list=groupPpl();
@@ -984,6 +1021,7 @@ function addEmployee(){
   var id='e'+Date.now().toString(36);
   var emp={id:id,name:'Новый сотрудник',color:nextColor(),g:S.group,lim:S.limit,days:new Set()};
   S.employees.push(emp);
+  markNew(id);
   S.active=id;
   save();
   render();
@@ -1090,7 +1128,15 @@ document.getElementById('grpNameIn').addEventListener('input',function(ev){
   var sub=document.querySelector('.brand .sub');
   if(sub) sub.textContent=curGroup().name+' · '+groupPpl().length+' чел. · праздники не считаются';
 });
-document.getElementById('peopleList').addEventListener('change',function(){ render(); });
+document.getElementById('peopleList').addEventListener('change',function(ev){
+  render();
+  if(ev.target.classList.contains('pin')){
+    var row=ev.target.closest('.prow');
+    var e=row&&S.employees.filter(function(x){return x.id===row.dataset.id;})[0];
+    if(e&&S.employees.some(function(x){return x.id!==e.id&&x.g===e.g&&normName(x.name)===normName(e.name);}))
+      toast('⚠ Такое ФИО уже есть в этой группе');
+  }
+});
 document.getElementById('dlgPeople').addEventListener('close',function(){ render(); });
 document.getElementById('peopleList').addEventListener('click',function(ev){
   var b=ev.target.closest('[data-act]');
@@ -1244,7 +1290,7 @@ function download(name,text,type){
 function jsonPayload(){
   return JSON.stringify({
     year:S.year,limit:S.limit,maxSim:S.maxSim,group:S.group,groups:S.groups,
-    employees:S.employees.map(function(e){return {name:e.name,color:e.color,g:e.g,lim:e.lim,days:Array.from(e.days)};})
+    employees:S.employees.map(function(e){return {id:e.id,name:e.name,color:e.color,g:e.g,lim:e.lim,days:Array.from(e.days)};})
   });
 }
 function enc(str){
@@ -1280,10 +1326,12 @@ function applyPayload(obj){
     if(!src||!src.name) return;
     var name=String(src.name).trim().slice(0,64);
     var gid=src.g?String(src.g):S.group,lim=+src.lim||S.limit;
-    var e=S.employees.filter(function(x){return x.name.toLowerCase()===name.toLowerCase()&&x.g===gid;})[0];
+    var e=src.id?S.employees.filter(function(x){return x.id===src.id;})[0]:null;
+    if(!e) e=S.employees.filter(function(x){return x.name.toLowerCase()===name.toLowerCase()&&x.g===gid;})[0];
     if(!e){
       e={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name,color:src.color||nextColor(),g:gid,lim:lim,days:new Set()};
       S.employees.push(e);
+      markNew(e.id);
     }else if(+src.lim){ e.lim=lim; }
     (src.days||[]).forEach(function(k){
       if(/^\d{4}-\d{2}-\d{2}$/.test(k)&&!e.days.has(k)){e.days.add(k);added++;}
@@ -1325,6 +1373,7 @@ function findOrCreate(name){
   if(e) return e;
   e={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name.slice(0,64),color:nextColor(),g:S.group,lim:S.limit,days:new Set()};
   S.employees.push(e);
+  markNew(e.id);
   return e;
 }
 function parseImport(text){
@@ -1365,6 +1414,8 @@ function parseImport(text){
 var SYNC_OVERRIDE='https://otpusk-dd079-default-rtdb.asia-southeast1.firebasedatabase.app';                      /* адрес можно вписать сюда, чтобы он был у всех */
 var SYNC_KEY='vacgraph.sync';
 var SYNC={snap:null,timer:null,ok:false,err:false,busy:0,peopleJson:'',lastUpdated:null,localAt:0,poll:null,pend:{}};
+var NEWEMP={};                 /* люди, добавленные только что: 15 с не удаляем их при синхронизации */
+function markNew(id){ NEWEMP[id]=Date.now(); }
 
 function syncUrl(){
   var u='';
@@ -1491,6 +1542,18 @@ function syncPull(){
         });
         SYNC.peopleJson=JSON.stringify(data.people);
         ensureGroups(S);
+        /* в базе список людей — главный: убираем локальные дубли, которых на сервере нет */
+        var ids={};
+        data.people.forEach(function(x){ if(x&&x.id) ids[x.id]=1; });
+        var extra=S.employees.filter(function(e){
+          return !ids[e.id]&&!(NEWEMP[e.id]&&Date.now()-NEWEMP[e.id]<15000);
+        });
+        if(extra.length){
+          S.employees=S.employees.filter(function(e){
+            return ids[e.id]||(NEWEMP[e.id]&&Date.now()-NEWEMP[e.id]<15000);
+          });
+          changed=true;
+        }
       }
       var days=data.days||{}, now=Date.now();
       S.employees.forEach(function(e){
@@ -1505,6 +1568,13 @@ function syncPull(){
       });
       SYNC.snap=snapshotLocal();
       if(changed){ save(true); render(); }
+      var dd=dedupePeople(S);
+      if(dd.merges){
+        dd.dropIds.forEach(syncDropEmp);
+        SYNC.peopleJson='';
+        save(true); render(); scheduleSync();
+        toast('Убраны копии: '+dd.merges);
+      }
     });
   }).catch(function(){
     SYNC.err=true; SYNC.ok=false; syncDot();
@@ -1690,7 +1760,8 @@ function init(){
   if(!S){ S=seed(); save(); }
   else if(!localStorage.getItem(KEY)){ mig=true; save(true); }
   ensureGroups(S);
-  if(dropEmptyGroups(S)) save(true);
+  var dd=dedupePeople(S);
+  if(dd.merges||dropEmptyGroups(S)) save(true);
   if(!S.active||!groupPpl().some(function(e){return e.id===S.active;})) S.active=(groupPpl()[0]&&groupPpl()[0].id)||null;
   applyHash();
   render();

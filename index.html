@@ -111,6 +111,19 @@ main{max-width:1180px;margin:0 auto;padding:4px 12px 40px}
 .chip.on .cc{background:var(--c);color:#fff}
 .chip.add{color:var(--muted);border-style:dashed}
 
+/* ── группы ──────────────────────────────────────────── */
+.gbar{max-width:1180px;margin:0 auto;padding:0 12px 7px;display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.gbar::-webkit-scrollbar{display:none}
+.gpill{
+  flex:none;display:inline-flex;align-items:center;gap:5px;white-space:nowrap;
+  border:1px solid var(--line);background:var(--card);color:var(--muted);
+  border-radius:999px;padding:5px 12px;font-size:12.5px;font-weight:650;
+}
+.gpill.on{background:var(--brand);border-color:var(--brand);color:#fff}
+.gpill .cnt{font-size:10.5px;font-weight:700;opacity:.65}
+.gpill.add{border-style:dashed;color:var(--muted)}
+@media (max-width:560px){.gbar{padding:0 10px 6px}}
+
 /* ── панель человека ─────────────────────────────────── */
 .panel{
   background:var(--card);border:1px solid var(--line);border-radius:var(--r);
@@ -121,6 +134,8 @@ main{max-width:1180px;margin:0 auto;padding:4px 12px 40px}
 .pname .dot{width:10px;height:10px;border-radius:50%;flex:none}
 .pmeta{font-size:12.5px;color:var(--muted);margin-left:auto}
 .pmeta .over{color:var(--warn)}
+.linkbtn{border:0;background:transparent;padding:0;font:inherit;color:inherit;font-weight:650;
+  border-bottom:1px dashed currentColor;cursor:pointer}
 .bar{height:5px;border-radius:99px;background:var(--line);overflow:hidden;margin:9px 0 10px}
 .bar>i{display:block;height:100%;border-radius:99px;transition:width .18s ease}
 .pactions{display:flex;gap:6px;flex-wrap:wrap}
@@ -242,6 +257,8 @@ dialog::backdrop{background:rgba(8,15,30,.55);-webkit-backdrop-filter:blur(3px);
   flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);border-radius:10px;
   padding:8px 10px;font-size:14px;
 }
+.pdays{width:58px;flex:none;border:1px solid var(--line);background:var(--bg);border-radius:9px;
+  padding:8px 4px;font-size:13px;font-weight:650;text-align:center}
 .del{border:1px solid var(--line);background:transparent;color:var(--muted);border-radius:9px;width:34px;height:34px;flex:none;font-size:14px}
 .field{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .field label{font-size:13px;color:var(--muted);flex:1;min-width:150px}
@@ -334,6 +351,8 @@ textarea{
   </div>
 </nav>
 
+<div class="gbar" id="gbar"></div>
+
 <main id="main"></main>
 
 <!-- люди и настройки -->
@@ -343,12 +362,17 @@ textarea{
       <h2>Сотрудники</h2>
       <button class="x" data-close>✕</button>
     </div>
+    <div class="field">
+      <label for="grpNameIn">Группа</label>
+      <input type="text" id="grpNameIn" maxlength="24" style="flex:1;min-width:130px;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;font-size:14px">
+    </div>
     <div id="peopleList" style="display:flex;flex-direction:column;gap:7px"></div>
     <button class="btn sm" id="btnAddEmp" style="align-self:flex-start">+ Добавить сотрудника</button>
+    <div class="note">Число справа — сколько дней нужно распределить в этом году. У каждого своё.</div>
     <div class="sep"></div>
     <div class="field">
-      <label for="limitIn">Дней отпуска в году</label>
-      <input type="number" id="limitIn" min="1" max="365" step="1" value="38">
+      <label for="limitIn">Дней по умолчанию для новых</label>
+      <input type="number" id="limitIn" min="1" max="400" step="1" value="38">
     </div>
     <div class="field">
       <label for="maxSimIn">Максимум одновременно в отпуске</label>
@@ -356,10 +380,10 @@ textarea{
     </div>
     <div class="sep"></div>
     <div class="dlg-actions">
-      <button class="btn danger" id="btnClearAll">Удалить всех</button>
+      <button class="btn danger" id="btnDelGroup">Удалить группу</button>
       <button class="btn primary" data-close>Готово</button>
     </div>
-    <div class="note">Цвет — нажмите на квадратик, чтобы сменить. Настройки сохраняются в этом браузере.</div>
+    <div class="note">Цвет — нажмите на квадратик, чтобы сменить.</div>
   </div>
 </dialog>
 
@@ -382,6 +406,21 @@ textarea{
     <div class="dlg-actions">
       <button class="btn" data-close>Отмена</button>
       <button class="btn primary" id="btnApplyRange">Отметить</button>
+    </div>
+  </div>
+</dialog>
+
+<!-- подтверждение -->
+<dialog id="dlgAsk">
+  <div class="dlg-body">
+    <div class="dlg-head">
+      <h2>Подтвердите</h2>
+      <button class="x" data-close>✕</button>
+    </div>
+    <div id="askMsg" style="font-size:14px;line-height:1.45"></div>
+    <div class="dlg-actions">
+      <button class="btn" id="btnAskNo">Отмена</button>
+      <button class="btn danger" id="btnAskYes">Удалить</button>
     </div>
   </div>
 </dialog>
@@ -426,7 +465,7 @@ textarea{
 (function(){
 'use strict';
 
-var KEY='vacgraph.v2';
+var KEY='vacgraph.v3', KEY_OLD='vacgraph.v2';
 var MONTHS=['Январь','Февраль','Март','Апрель','Май','Июнь','Июль','Август','Сентябрь','Октябрь','Ноябрь','Декабрь'];
 var WD=['Пн','Вт','Ср','Чт','Пт','Сб','Вс'];
 var PALETTE=['#2563eb','#0e9f6e','#db2777','#f59e0b','#7c3aed','#0891b2','#e11d48','#65a30d','#c026d3','#0d9488','#ea580c','#4f46e5'];
@@ -445,16 +484,28 @@ var CAL={
 };
 var BASE_H=['01-01','01-02','01-03','01-04','01-05','01-06','01-07','01-08','02-23','03-08','05-01','05-09','06-12','11-04'];
 
-/* ── план из файла «Отпуска ГКС 1 — 2027» ───────────── */
+/* ── группы сотрудников ─────────────────────────────── */
+var GROUPS=[
+  {id:'g1',name:'ГКС 1'},
+  {id:'g2',name:'Группа 2'}
+];
+
+/* ── план из файла «Отпуска ГКС 1 — 2027» + вторая группа
+      g — группа, lim — сколько дней нужно распределить  ─── */
 var PLAN=[
- {n:'Глазков Кирилл Васильевич',p:[['2027-04-28','2027-05-11'],['2027-06-30','2027-07-13'],['2027-09-25','2027-10-06']]},
- {n:'Макаров Дмитрий Александрович',p:[['2027-05-16','2027-05-30'],['2027-08-20','2027-09-06']]},
- {n:'Маккамбаев Жовохирбек Султанмуратович',p:[['2027-06-03','2027-06-27'],['2027-12-17','2027-12-30']]},
- {n:'Петров Евгений Евгеньевич',p:[['2027-04-01','2027-04-13'],['2027-07-14','2027-07-31']]},
- {n:'Петров Юрий Евгеньевич',p:[['2027-05-22','2027-05-31'],['2027-07-02','2027-07-13'],['2027-08-22','2027-09-06']]},
- {n:'Слободяник Андрей Евгеньевич',p:[['2027-03-07','2027-03-21'],['2027-09-06','2027-09-19']]},
- {n:'Филонов Марк Антоньевич',p:[]},
- {n:'Хаустов Максим Аркадьевич',p:[['2027-02-08','2027-02-15'],['2027-08-01','2027-08-16'],['2027-10-01','2027-10-14']]}
+ {n:'Глазков Кирилл Васильевич',g:'g1',lim:38,p:[['2027-04-28','2027-05-11'],['2027-06-30','2027-07-13'],['2027-09-25','2027-10-06']]},
+ {n:'Макаров Дмитрий Александрович',g:'g1',lim:38,p:[['2027-05-16','2027-05-30'],['2027-08-20','2027-09-06']]},
+ {n:'Маккамбаев Жовохирбек Султанмуратович',g:'g1',lim:38,p:[['2027-06-03','2027-06-27'],['2027-12-17','2027-12-30']]},
+ {n:'Петров Евгений Евгеньевич',g:'g1',lim:38,p:[['2027-04-01','2027-04-13'],['2027-07-14','2027-07-31']]},
+ {n:'Петров Юрий Евгеньевич',g:'g1',lim:38,p:[['2027-05-22','2027-05-31'],['2027-07-02','2027-07-13'],['2027-08-22','2027-09-06']]},
+ {n:'Слободяник Андрей Евгеньевич',g:'g1',lim:38,p:[['2027-03-07','2027-03-21'],['2027-09-06','2027-09-19']]},
+ {n:'Филонов Марк Антоньевич',g:'g1',lim:38,p:[]},
+ {n:'Хаустов Максим Аркадьевич',g:'g1',lim:38,p:[['2027-02-08','2027-02-15'],['2027-08-01','2027-08-16'],['2027-10-01','2027-10-14']]},
+ {n:'Архипов Никита Евгеньевич',g:'g2',lim:209,p:[]},
+ {n:'Воронов Дмитрий Константинович',g:'g2',lim:143,p:[]},
+ {n:'Спастных Егор Владимирович',g:'g2',lim:198,p:[]},
+ {n:'Солдатов Владимир Анатольевич',g:'g2',lim:200,p:[]},
+ {n:'Шишкин Сергей Владимирович',g:'g2',lim:209,p:[]}
 ];
 
 var S=null, view='cal';
@@ -503,57 +554,112 @@ function shortName(n){
 
 /* ── состояние ───────────────────────────────────────── */
 function emptyState(){
-  return {year:2027,limit:38,maxSim:1,active:null,employees:[]};
+  return {year:2027,limit:38,maxSim:1,active:null,group:'g1',groups:[],employees:[]};
+}
+function daysFromRanges(list){
+  var days=new Set();
+  (list||[]).forEach(function(r){
+    if(!r||!r[0]||!r[1]) return;
+    var d=dateFromKey(r[0]),end=dateFromKey(r[1]);
+    while(d<=end){ days.add(keyOf(d)); d.setDate(d.getDate()+1); }
+  });
+  return days;
 }
 function seed(){
   var st=emptyState();
+  st.groups=GROUPS.map(function(g){return {id:g.id,name:g.name};});
+  st.group='g1';
   st.employees=PLAN.map(function(p,i){
-    var days=new Set();
-    p.p.forEach(function(r){
-      var d=dateFromKey(r[0]),end=dateFromKey(r[1]);
-      while(d<=end){ days.add(keyOf(d)); d.setDate(d.getDate()+1); }
-    });
-    return {id:'e'+(i+1),name:p.n,color:PALETTE[i%PALETTE.length],days:days};
+    return {id:'e'+(i+1),name:p.n,color:PALETTE[i%PALETTE.length],g:p.g||'g1',lim:+p.lim||38,days:daysFromRanges(p.p)};
   });
   st.active=st.employees[0].id;
   return st;
 }
+/* дописать отсутствующие группу/людей из файла (один раз при обновлении версии) */
+function migrateFromSeed(st){
+  GROUPS.forEach(function(g){
+    if(!st.groups.some(function(x){return x.id===g.id;})) st.groups.push({id:g.id,name:g.name});
+  });
+  PLAN.forEach(function(p,i){
+    var low=String(p.n).toLowerCase();
+    if(st.employees.some(function(e){return String(e.name).toLowerCase()===low;})) return;
+    var id='e'+(i+1);
+    if(st.employees.some(function(e){return e.id===id;})) id='e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5);
+    st.employees.push({id:id,name:p.n,color:PALETTE[i%PALETTE.length],g:p.g||'g1',lim:+p.lim||st.limit,days:daysFromRanges(p.p)});
+  });
+}
 function save(skipSync){
   try{
     localStorage.setItem(KEY,JSON.stringify({
-      year:S.year,limit:S.limit,maxSim:S.maxSim,active:S.active,
-      employees:S.employees.map(function(e){return {id:e.id,name:e.name,color:e.color,days:Array.from(e.days)};})
+      year:S.year,limit:S.limit,maxSim:S.maxSim,active:S.active,group:S.group,
+      groups:S.groups,
+      employees:S.employees.map(function(e){return {id:e.id,name:e.name,color:e.color,g:e.g,lim:e.lim,days:Array.from(e.days)};})
     }));
   }catch(err){}
   if(!skipSync) scheduleSync();
 }
 function load(){
+  var raw=null,migrate=false;
   try{
-    var raw=localStorage.getItem(KEY);
-    if(!raw) return null;
-    var d=JSON.parse(raw);
-    if(!d||!Array.isArray(d.employees)) return null;
-    var st=emptyState();
-    st.year=+d.year||st.year;
-    st.limit=Math.max(1,+d.limit||38);
-    st.maxSim=Math.max(1,+d.maxSim||1);
-    st.employees=d.employees.filter(function(e){return e&&e.name;}).map(function(e,i){
-      return {
-        id:e.id||('e'+i+'_'+Math.random().toString(36).slice(2,6)),
-        name:String(e.name).slice(0,64),
-        color:/^#[0-9a-f]{6}$/i.test(e.color||'')?e.color:PALETTE[i%PALETTE.length],
-        days:toSet(Array.isArray(e.days)?e.days.filter(function(k){return /^\d{4}-\d{2}-\d{2}$/.test(k);}):[])
-      };
-    });
-    st.active=(d.active&&st.employees.some(function(e){return e.id===d.active;}))?d.active:(st.employees[0]&&st.employees[0].id)||null;
-    return st;
-  }catch(err){return null;}
+    raw=localStorage.getItem(KEY);
+    if(!raw){ raw=localStorage.getItem(KEY_OLD); migrate=!!raw; }
+  }catch(err){}
+  if(!raw) return null;
+  var d;
+  try{ d=JSON.parse(raw); }catch(err){ return null; }
+  if(!d||!Array.isArray(d.employees)) return null;
+  var st=emptyState();
+  st.year=+d.year||st.year;
+  st.limit=Math.max(1,+d.limit||38);
+  st.maxSim=Math.max(1,+d.maxSim||1);
+  st.groups=(Array.isArray(d.groups)?d.groups:[]).filter(function(g){return g&&g.id;}).map(function(g){
+    return {id:String(g.id),name:String(g.name||'Группа').slice(0,24),maxSim:Math.max(1,+g.maxSim||st.maxSim)};
+  });
+  if(d.group) st.group=String(d.group);
+  st.employees=d.employees.filter(function(e){return e&&e.name;}).map(function(e,i){
+    return {
+      id:e.id||('e'+i+'_'+Math.random().toString(36).slice(2,6)),
+      name:String(e.name).slice(0,64),
+      color:/^#[0-9a-f]{6}$/i.test(e.color||'')?e.color:PALETTE[i%PALETTE.length],
+      g:e.g?String(e.g):'g1',
+      lim:Math.max(1,+e.lim||st.limit),
+      days:toSet(Array.isArray(e.days)?e.days.filter(function(k){return /^\d{4}-\d{2}-\d{2}$/.test(k);}):[])
+    };
+  });
+  ensureGroups(st);
+  if(migrate) migrateFromSeed(st);
+  ensureGroups(st);
+  st.active=(d.active&&st.employees.some(function(e){return e.id===d.active;}))?d.active:(st.employees.filter(function(e){return e.g===st.group;})[0]||st.employees[0]||{}).id||null;
+  return st;
+}
+function ensureGroups(st){
+  st=st||S;
+  if(!st) return;
+  if(!Array.isArray(st.groups)||!st.groups.length) st.groups=GROUPS.map(function(g){return {id:g.id,name:g.name};});
+  st.groups.forEach(function(g){ if(!(g.maxSim>=1)) g.maxSim=Math.max(1,+st.maxSim||1); });
+  (st.employees||[]).forEach(function(e){
+    if(e.g&&!st.groups.some(function(g){return g.id===e.g;})) st.groups.push({id:e.g,name:'Группа',maxSim:Math.max(1,+st.maxSim||1)});
+  });
+  if(!st.groups.some(function(g){return g.id===st.group;})) st.group=st.groups[0].id;
+}
+function curMaxSim(){
+  var g=curGroup();
+  return Math.max(1,+(g&&g.maxSim)||(S&&S.maxSim)||1);
+}
+function groupPpl(){
+  if(!S) return [];
+  return S.employees.filter(function(e){return e.g===S.group;});
+}
+function curGroup(){
+  if(!S||!S.groups) return {id:'g1',name:'ГКС 1'};
+  return S.groups.filter(function(g){return g.id===S.group;})[0]||S.groups[0];
 }
 
 function activeEmp(){
   if(!S) return null;
-  for(var i=0;i<S.employees.length;i++) if(S.employees[i].id===S.active) return S.employees[i];
-  return S.employees[0]||null;
+  var list=groupPpl();
+  for(var i=0;i<list.length;i++) if(list[i].id===S.active) return list[i];
+  return list[0]||null;
 }
 function countYear(e,y){
   y=y||S.year;
@@ -595,7 +701,7 @@ function maxPeriod(e,y){
 }
 function overlaps(e){
   var out=[];
-  S.employees.forEach(function(o){
+  groupPpl().forEach(function(o){
     if(o.id===e.id) return;
     var hit=false;
     e.days.forEach(function(k){ if(o.days.has(k)) hit=true; });
@@ -610,9 +716,9 @@ function cellHTML(k){
   if(!e) return '';
   var y=+k.slice(0,4),m=+k.slice(5,7)-1,d=+k.slice(8,10);
   var off=isOff(k),hol=isHoliday(k),sel=e.days.has(k);
-  var others=[];
-  for(var i=0;i<S.employees.length;i++){
-    var o=S.employees[i];
+  var others=[],list=groupPpl();
+  for(var i=0;i<list.length;i++){
+    var o=list[i];
     if(o.id!==e.id&&o.days.has(k)) others.push(o.color);
   }
   var dots=others.slice(0,4).map(function(c){return '<i style="background:'+c+'"></i>';}).join('');
@@ -634,7 +740,7 @@ function monthHTML(y,m){
 }
 
 function panelHTML(e){
-  var y=S.year,used=countYear(e,y),lim=Math.max(1,S.limit);
+  var y=S.year,used=countYear(e,y),lim=Math.max(1,+e.lim||S.limit);
   var left=lim-used,ps=periodsOf(e,y),mx=maxPeriod(e,y),okRule=mx>=14,ov=overlaps(e);
   var chips=ps.map(function(p){
     return '<span class="pchip"><span class="pgo" data-act="goperiod" data-a="'+p.a+'">'+
@@ -643,7 +749,7 @@ function panelHTML(e){
   }).join('');
   return '<div class="panel" id="panel">'+
     '<div class="pinfo"><span class="pname"><i class="dot" style="background:'+e.color+'"></i>'+esc(e.name)+'</span>'+
-      '<span class="pmeta">'+used+' из '+lim+' &middot; <span class="muted">осталось '+(left<0?0:left)+'</span>'+
+      '<span class="pmeta"><button type="button" class="linkbtn" data-act="editlim" data-id="'+e.id+'" title="Сколько дней распределить">'+used+' из '+lim+'</button> &middot; <span class="muted">осталось '+(left<0?0:left)+'</span>'+
       (used>lim?' <b class="over">перебор</b>':'')+'</span></div>'+
     '<div class="bar"><i style="width:'+Math.min(100,used/lim*100)+'%;background:'+(used>lim?'var(--warn)':e.color)+'"></i></div>'+
     '<div class="rules">'+
@@ -664,7 +770,7 @@ function renderCal(){
   var e=activeEmp();
   if(!e){ mainEl.innerHTML=emptyHTML(); return; }
   var y=S.year;
-  var chips=S.employees.map(function(p){
+  var chips=groupPpl().map(function(p){
     return '<button class="chip'+(p.id===e.id?' on':'')+'" data-act="emp" data-id="'+p.id+'" style="--c:'+p.color+'" title="'+esc(p.name)+'">'+
       '<i class="dot"></i><span class="cn">'+esc(shortName(p.name))+'</span><b class="cc">'+countYear(p,y)+'</b></button>';
   }).join('')+'<button class="chip add" data-act="newEmp">+ сотрудник</button>';
@@ -676,28 +782,29 @@ function renderCal(){
     '<div class="hint">Серые дни — выходные, розовые — праздники (в счёт отпуска не идут). Точки под числом — дни других сотрудников.</div>';
 }
 function emptyHTML(){
-  return '<div class="empty"><div class="big">🗓️</div><h2>Список сотрудников пуст</h2>'+
+  return '<div class="empty"><div class="big">🗓️</div><h2>В группе пока нет сотрудников</h2>'+
     '<p>Добавьте людей — и можно отмечать отпуска.</p>'+
     '<button class="btn primary" data-act="newEmp">Добавить сотрудника</button></div>';
 }
 
 /* ── обзор ───────────────────────────────────────────── */
 function renderOver(){
-  var y=S.year;
-  if(!S.employees.length){ mainEl.innerHTML=emptyHTML(); return; }
+  var y=S.year,list=groupPpl();
+  if(!list.length){ mainEl.innerHTML=emptyHTML(); return; }
   var totalUsed=0,totalLimit=0,bad=[];
-  S.employees.forEach(function(e){
-    totalUsed+=countYear(e,y); totalLimit+=S.limit;
+  list.forEach(function(e){
+    totalUsed+=countYear(e,y); totalLimit+=Math.max(1,+e.lim||S.limit);
     if(maxPeriod(e,y)<14) bad.push(shortName(e.name));
   });
   var maxMonth=1;
-  S.employees.forEach(function(e){
+  list.forEach(function(e){
     for(var m=0;m<12;m++){ var c=monthCount(e,y,m); if(c>maxMonth) maxMonth=c; }
   });
   var head='<tr><th class="nm">Сотрудник</th>'+MONTHS.map(function(m){return '<th>'+m.slice(0,3)+'</th>';}).join('')+'<th>Итого</th></tr>';
   var rows='';
-  S.employees.forEach(function(e){
-    var t=0,used=countYear(e,y),left=S.limit-used,ok=maxPeriod(e,y)>=14;
+  list.forEach(function(e){
+    var lim=Math.max(1,+e.lim||S.limit);
+    var t=0,used=countYear(e,y),left=lim-used,ok=maxPeriod(e,y)>=14;
     var tds=MONTHS.map(function(_,m){
       var c=monthCount(e,y,m); t+=c;
       var a=c?(0.13+0.74*Math.min(1,c/maxMonth)):0;
@@ -705,12 +812,12 @@ function renderOver(){
       return '<td class="ocell" data-act="open" data-id="'+e.id+'" data-m="'+m+'" style="'+st+'">'+(c||'')+'</td>';
     }).join('');
     rows+='<tr><td class="nm" title="'+esc(e.name)+'"><div class="nm1">'+(ok?'':'<i class="wm">⚠</i>')+esc(shortName(e.name))+'</div>'+
-      '<div class="nm2">'+used+' из '+S.limit+' · ост. '+(left<0?0:left)+'</div></td>'+tds+'<td class="tot">'+(t||'')+'</td></tr>';
+      '<div class="nm2">'+used+' из '+lim+' · ост. '+(left<0?0:left)+'</div></td>'+tds+'<td class="tot">'+(t||'')+'</td></tr>';
   });
   var tot=[],grand=0;
   for(var m=0;m<12;m++){
     var s=0;
-    S.employees.forEach(function(e){ s+=monthCount(e,y,m); });
+    list.forEach(function(e){ s+=monthCount(e,y,m); });
     tot.push(s); grand+=s;
   }
   rows+='<tr class="sumrow"><th class="nm">Всего</th>'+tot.map(function(v){return '<td>'+(v||'')+'</td>';}).join('')+'<td class="tot">'+(grand||'')+'</td></tr>';
@@ -719,7 +826,7 @@ function renderOver(){
     '<div class="stats">'+
       '<div class="stat"><b>'+totalUsed+'</b><span>дн. использовано</span></div>'+
       '<div class="stat"><b>'+Math.max(0,totalLimit-totalUsed)+'</b><span>дн. осталось</span></div>'+
-      '<div class="stat"><b>'+S.employees.length+'</b><span>сотрудников</span></div>'+
+      '<div class="stat"><b>'+list.length+'</b><span>сотрудников</span></div>'+
     '</div>'+
     warn+
     '<div class="card scroll-x" style="margin-top:2px"><table class="otable"><thead>'+head+'</thead><tbody>'+rows+'</tbody></table></div>'+
@@ -729,7 +836,7 @@ function renderOver(){
 /* ── нагрузка ────────────────────────────────────────── */
 function loadMap(y){
   var map={};
-  S.employees.forEach(function(e){
+  groupPpl().forEach(function(e){
     e.days.forEach(function(k){
       if(k.indexOf(y+'-')!==0) return;
       (map[k]=map[k]||[]).push(e);
@@ -738,14 +845,14 @@ function loadMap(y){
   return map;
 }
 function renderLoad(){
-  var y=S.year;
-  if(!S.employees.length){ mainEl.innerHTML=emptyHTML(); return; }
-  var map=loadMap(y),max=1,k,total=0;
+  var y=S.year,list=groupPpl();
+  if(!list.length){ mainEl.innerHTML=emptyHTML(); return; }
+  var map=loadMap(y),max=1,k,total=0,msim=curMaxSim();
   for(k in map) max=Math.max(max,map[k].length);
-  S.employees.forEach(function(e){ total+=countYear(e,y); });
+  list.forEach(function(e){ total+=countYear(e,y); });
 
   var bad=[];
-  Object.keys(map).sort().forEach(function(k2){ if(map[k2].length>S.maxSim) bad.push(k2); });
+  Object.keys(map).sort().forEach(function(k2){ if(map[k2].length>msim) bad.push(k2); });
   var groups=[],cs=null,prev=null;
   bad.forEach(function(k3){
     if(cs&&isNext(prev,k3)){prev=k3;return;}
@@ -760,16 +867,16 @@ function renderLoad(){
       var dd=dateFromKey(dk); dd.setDate(dd.getDate()+1); dk=keyOf(dd);
     }
     return '<div class="alert"><span>⚠</span><span><b>'+fmtDM(g[0])+(g[0]!==g[1]?' — '+fmtDM(g[1]):'')+
-      '</b> — до '+mx+' чел. одновременно (можно '+S.maxSim+')<br>'+
+      '</b> — до '+mx+' чел. одновременно (можно '+msim+')<br>'+
       '<span class="muted" style="font-size:12px">'+esc(Object.keys(names).join(', '))+'</span></span></div>';
   }).join('');
-  if(!alerts) alerts='<div class="alert ok"><span>✓</span><span>Нет дней, когда в отпуске больше '+S.maxSim+' человек</span></div>';
+  if(!alerts) alerts='<div class="alert ok"><span>✓</span><span>Нет дней, когда в отпуске больше '+msim+' человек</span></div>';
 
   function cell(k4,m){
     var n=(map[k4]||[]).length;
     var a=n?(0.10+0.78*Math.min(1,n/max)):0;
     var st=n?('background:rgba(37,99,235,'+a.toFixed(3)+');'+(a>0.5?'color:#fff;':'')):'';
-    var cls='lcell'+(n?'':' zero')+(isHoliday(k4)?' hol':(isOff(k4)?' we':''))+((n>S.maxSim)?' over':'');
+    var cls='lcell'+(n?'':' zero')+(isHoliday(k4)?' hol':(isOff(k4)?' we':''))+((n>msim)?' over':'');
     var names=(map[k4]||[]).map(function(e){return shortName(e.name);}).join(', ');
     return '<button type="button" class="'+cls+'" data-act="who" data-k="'+k4+'" style="'+st+'" title="'+esc(names)+'">'+(+k4.slice(8,10))+'</button>';
   }
@@ -783,7 +890,7 @@ function renderLoad(){
       cells+=cell(kk,m);
     }
     grid+='<div class="month"><div class="mhead"><span class="mname">'+MONTHS[m]+'</span>'+
-      '<span class="mbadge'+(peak?'':' off')+'" style="--c:'+(peak>S.maxSim?'var(--warn)':'var(--brand)')+'">'+(peak?'макс '+peak:'нет')+'</span></div>'+
+      '<span class="mbadge'+(peak?'':' off')+'" style="--c:'+(peak>msim?'var(--warn)':'var(--brand)')+'">'+(peak?'макс '+peak:'нет')+'</span></div>'+
       '<div class="dow">'+WD.map(function(w){return '<span>'+w+'</span>';}).join('')+'</div>'+
       '<div class="grid">'+cells+'</div></div>';
   }
@@ -791,7 +898,7 @@ function renderLoad(){
     '<div class="stats">'+
       '<div class="stat"><b>'+total+'</b><span>дн. отпуска</span></div>'+
       '<div class="stat"><b>'+max+'</b><span>макс. одновременно</span></div>'+
-      '<div class="stat"><b>'+S.employees.length+'</b><span>сотрудников</span></div>'+
+      '<div class="stat"><b>'+list.length+'</b><span>сотрудников</span></div>'+
     '</div>'+
     '<div class="alerts" style="margin-bottom:12px">'+alerts+'</div>'+
     '<div class="loadgrid">'+grid+'</div>'+
@@ -799,6 +906,15 @@ function renderLoad(){
 }
 
 /* ── общий рендер ────────────────────────────────────── */
+function renderGbar(){
+  var el=document.getElementById('gbar');
+  if(!el) return;
+  el.innerHTML=S.groups.map(function(g){
+    var n=S.employees.filter(function(e){return e.g===g.id;}).length;
+    return '<button class="gpill'+(g.id===S.group?' on':'')+'" data-gid="'+g.id+'" title="'+esc(g.name)+'">'+
+      esc(g.name)+'<span class="cnt">('+n+')</span></button>';
+  }).join('');
+}
 function render(){
   var tabs=document.querySelectorAll('.tab');
   for(var i=0;i<tabs.length;i++) tabs[i].classList.toggle('on',tabs[i].dataset.view===view);
@@ -814,8 +930,9 @@ function render(){
     }
     if(ys.value!==String(S.year)) ys.value=String(S.year);
   }
+  renderGbar();
   var sub=document.querySelector('.brand .sub');
-  if(sub) sub.textContent=S.limit+' дней на человека · праздники не считаются';
+  if(sub) sub.textContent=curGroup().name+' · '+groupPpl().length+' чел. · праздники не считаются';
   if(view==='cal') renderCal();
   else if(view==='over') renderOver();
   else renderLoad();
@@ -865,7 +982,7 @@ function toggleDay(k){
 }
 function addEmployee(){
   var id='e'+Date.now().toString(36);
-  var emp={id:id,name:'Новый сотрудник',color:nextColor(),days:new Set()};
+  var emp={id:id,name:'Новый сотрудник',color:nextColor(),g:S.group,lim:S.limit,days:new Set()};
   S.employees.push(emp);
   S.active=id;
   save();
@@ -885,7 +1002,7 @@ function requestText(){
   out+=ps.map(function(p){
     return '• '+fmtDM(p.a)+' – '+fmtDM(p.b)+' ('+p.used+' дн.'+(p.h?', '+p.h+' праздн. не считаются':'')+')';
   }).join('\n');
-  out+='\nВсего: '+used+' из '+S.limit+' дн.';
+  out+='\nВсего: '+used+' из '+(+e.lim||S.limit)+' дн.';
   return out;
 }
 function copyText(txt){
@@ -913,25 +1030,65 @@ function removePeriod(start){
 
 /* ── диалог людей ────────────────────────────────────── */
 function showDlg(el){ if(!el.open) el.showModal(); }
+
+/* своё подтверждение: нативный confirm() браузер молча блокирует,
+   когда открыт модальный <dialog> (кнопка «Удалить» тогда не срабатывала) */
+var ASK={yes:null,no:null,done:true};
+function askConfirm(msg,yes,no,label){
+  var d=document.getElementById('dlgAsk');
+  ASK.yes=yes||null; ASK.no=no||null; ASK.done=false;
+  document.getElementById('askMsg').textContent=msg;
+  document.getElementById('btnAskYes').textContent=label||'Удалить';
+  if(!d.open) d.showModal();
+}
+function askFinish(ok){
+  if(ASK.done) return;
+  ASK.done=true;
+  var d=document.getElementById('dlgAsk');
+  if(d.open) d.close();
+  var cb=ok?ASK.yes:ASK.no;
+  ASK.yes=ASK.no=null;
+  if(cb) setTimeout(cb,0);
+}
+document.getElementById('btnAskYes').addEventListener('click',function(){ askFinish(true); });
+document.getElementById('btnAskNo').addEventListener('click',function(){ askFinish(false); });
+document.getElementById('dlgAsk').addEventListener('close',function(){ askFinish(false); });
 function openPeople(){
   var box=document.getElementById('peopleList');
-  box.innerHTML=S.employees.map(function(e){
+  box.innerHTML=groupPpl().map(function(e){
     return '<div class="prow" data-id="'+e.id+'">'+
       '<button class="sw" data-act="recolor" style="background:'+e.color+'" title="Сменить цвет"></button>'+
       '<input class="pin" value="'+esc(e.name)+'" maxlength="64">'+
+      '<input class="pdays" type="number" min="1" max="400" step="1" value="'+(+e.lim||S.limit)+'" title="Сколько дней распределить">'+
       '<button class="del" data-act="delEmp" title="Удалить">✕</button></div>';
   }).join('')||'<div class="muted" style="font-size:13px">Пока никого нет</div>';
+  document.getElementById('grpNameIn').value=curGroup().name;
   document.getElementById('limitIn').value=S.limit;
-  document.getElementById('maxSimIn').value=S.maxSim;
+  document.getElementById('maxSimIn').value=curMaxSim();
   showDlg(document.getElementById('dlgPeople'));
 }
 document.getElementById('peopleList').addEventListener('input',function(ev){
-  if(!ev.target.classList.contains('pin')) return;
   var row=ev.target.closest('.prow');
+  if(!row) return;
   var e=S.employees.filter(function(x){return x.id===row.dataset.id;})[0];
   if(!e) return;
-  e.name=ev.target.value.slice(0,64)||'Без имени';
-  save();
+  if(ev.target.classList.contains('pin')){
+    e.name=ev.target.value.slice(0,64)||'Без имени';
+    save();
+  }else if(ev.target.classList.contains('pdays')){
+    var v=Math.round(+ev.target.value);
+    if(!isFinite(v)||v<1) return;
+    e.lim=Math.min(400,v);
+    save();
+  }
+});
+document.getElementById('grpNameIn').addEventListener('input',function(ev){
+  var g=curGroup();
+  if(!g) return;
+  g.name=ev.target.value.slice(0,24)||'Группа';
+  save(); renderGbar();
+  var sub=document.querySelector('.brand .sub');
+  if(sub) sub.textContent=curGroup().name+' · '+groupPpl().length+' чел. · праздники не считаются';
 });
 document.getElementById('peopleList').addEventListener('change',function(){ render(); });
 document.getElementById('dlgPeople').addEventListener('close',function(){ render(); });
@@ -950,27 +1107,70 @@ document.getElementById('peopleList').addEventListener('click',function(ev){
     save(); render(); openPeople();
   }
   if(b.dataset.act==='delEmp'){
-    if(!confirm('Удалить «'+e.name+'» и все отмеченные дни?')) return;
-    S.employees=S.employees.filter(function(x){return x.id!==id;});
-    if(S.active===id) S.active=(S.employees[0]&&S.employees[0].id)||null;
-    save(); render();
-    if(!S.employees.length) document.getElementById('dlgPeople').close();
-    else openPeople();
+    document.getElementById('dlgPeople').close();
+    askConfirm('Удалить «'+e.name+'» и все отмеченные дни?',function(){
+      S.employees=S.employees.filter(function(x){return x.id!==id;});
+      syncDropEmp(id);
+      dropEmptyGroups(S);
+      if(S.active===id) S.active=(groupPpl()[0]&&groupPpl()[0].id)||null;
+      save(); render();
+      if(groupPpl().length) openPeople();
+    },function(){ openPeople(); });
   }
 });
 document.getElementById('btnAddEmp').addEventListener('click',addEmployee);
-document.getElementById('btnClearAll').addEventListener('click',function(){
-  if(!confirm('Удалить всех сотрудников и все дни?')) return;
-  S.employees=[]; S.active=null; save();
-  document.getElementById('dlgPeople').close();
-  render();
-});
+document.getElementById('btnDelGroup').addEventListener('click',deleteGroup);
 document.getElementById('limitIn').addEventListener('change',function(ev){
-  S.limit=Math.max(1,Math.min(365,+ev.target.value||38)); save(); render();
+  S.limit=Math.max(1,Math.min(400,+ev.target.value||38)); save(); render();
 });
 document.getElementById('maxSimIn').addEventListener('change',function(ev){
-  S.maxSim=Math.max(1,Math.min(99,+ev.target.value||1)); save(); render();
+  var g=curGroup();
+  if(!g) return;
+  g.maxSim=Math.max(1,Math.min(99,+ev.target.value||1));
+  save(); render();
 });
+
+/* ── группы: создание, переключение, удаление ────────── */
+function syncDropEmp(id){
+  if(!syncOn()) return;
+  fetch(syncUrl()+'/data/days/'+encodeURIComponent(id)+'.json',{method:'DELETE',cache:'no-store'}).catch(function(){});
+}
+function setGroup(id){
+  if(!S.groups.some(function(g){return g.id===id;})) return;
+  S.group=id;
+  var list=groupPpl();
+  if(!list.some(function(e){return e.id===S.active;})) S.active=list.length?list[0].id:null;
+  save(); render();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+function dropEmptyGroups(st){
+  st=st||S;
+  if(!st||!Array.isArray(st.groups)||st.groups.length<2) return false;
+  var keep=st.groups.filter(function(g){
+    return (st.employees||[]).some(function(e){return e.g===g.id;});
+  });
+  if(!keep.length) keep=[st.groups[0]];
+  if(keep.length===st.groups.length) return false;
+  st.groups=keep;
+  ensureGroups(st);
+  return true;
+}
+function deleteGroup(){
+  if(S.groups.length<2){ toast('Должна остаться хотя бы одна группа'); return; }
+  var g=curGroup(),list=groupPpl();
+  var wasOpen=document.getElementById('dlgPeople').open;
+  if(wasOpen) document.getElementById('dlgPeople').close();
+  askConfirm('Удалить группу «'+g.name+'»'+(list.length?' вместе с сотрудниками ('+list.length+' чел.)':'')+
+    '? Это сразу разойдётся всем.',function(){
+      list.forEach(function(e){ syncDropEmp(e.id); });
+      S.employees=S.employees.filter(function(e){return e.g!==g.id;});
+      S.groups=S.groups.filter(function(x){return x.id!==g.id;});
+      ensureGroups(S);
+      S.active=(groupPpl()[0]||{}).id||null;
+      save(); render();
+      toast('Группа удалена');
+    },function(){ if(wasOpen) openPeople(); });
+}
 
 /* ── диапазон ────────────────────────────────────────── */
 document.getElementById('btnApplyRange').addEventListener('click',function(){
@@ -1012,14 +1212,18 @@ function openRange(){
 }
 
 /* ── импорт / экспорт ────────────────────────────────── */
+function groupNameOf(id){
+  var g=S.groups.filter(function(x){return x.id===id;})[0];
+  return g?g.name:'';
+}
 function rangesCSV(){
   var y=S.year;
-  var rows=[['Сотрудник','Период','Начало','Конец','Календарных дней','Дней отпуска','Итого за год']];
+  var rows=[['Группа','Сотрудник','Период','Начало','Конец','Календарных дней','Дней отпуска','Дней к распределению','Итого за год']];
   S.employees.forEach(function(e){
-    var ps=periodsOf(e,y),used=countYear(e,y);
-    if(!ps.length) rows.push([e.name,'','','','','',used]);
+    var ps=periodsOf(e,y),used=countYear(e,y),gn=groupNameOf(e.g),lim=+e.lim||S.limit;
+    if(!ps.length) rows.push([gn,e.name,'','','','','',lim,used]);
     ps.forEach(function(p,i){
-      rows.push([e.name,i+1+' из '+ps.length,fmtDM(p.a),fmtDM(p.b),p.cal,p.used,used]);
+      rows.push([gn,e.name,i+1+' из '+ps.length,fmtDM(p.a),fmtDM(p.b),p.cal,p.used,lim,used]);
     });
   });
   return rows.map(function(r){
@@ -1039,8 +1243,8 @@ function download(name,text,type){
 }
 function jsonPayload(){
   return JSON.stringify({
-    year:S.year,limit:S.limit,maxSim:S.maxSim,
-    employees:S.employees.map(function(e){return {name:e.name,color:e.color,days:Array.from(e.days)};})
+    year:S.year,limit:S.limit,maxSim:S.maxSim,group:S.group,groups:S.groups,
+    employees:S.employees.map(function(e){return {name:e.name,color:e.color,g:e.g,lim:e.lim,days:Array.from(e.days)};})
   });
 }
 function enc(str){
@@ -1064,14 +1268,23 @@ function applyPayload(obj){
   if(obj.limit) S.limit=Math.max(1,+obj.limit);
   if(obj.maxSim) S.maxSim=Math.max(1,+obj.maxSim);
   S.year=y;
+  if(Array.isArray(obj.groups)&&obj.groups.length){
+    obj.groups.forEach(function(g){
+      if(!g||!g.id) return;
+      if(!S.groups.some(function(x){return x.id===g.id;})) S.groups.push({id:String(g.id),name:String(g.name||'Группа').slice(0,24)});
+    });
+  }
+  if(obj.group&&S.groups.some(function(g){return g.id===obj.group;})) S.group=obj.group;
+  ensureGroups(S);
   (obj.employees||[]).forEach(function(src){
     if(!src||!src.name) return;
     var name=String(src.name).trim().slice(0,64);
-    var e=S.employees.filter(function(x){return x.name.toLowerCase()===name.toLowerCase();})[0];
+    var gid=src.g?String(src.g):S.group,lim=+src.lim||S.limit;
+    var e=S.employees.filter(function(x){return x.name.toLowerCase()===name.toLowerCase()&&x.g===gid;})[0];
     if(!e){
-      e={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name,color:src.color||nextColor(),days:new Set()};
+      e={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name,color:src.color||nextColor(),g:gid,lim:lim,days:new Set()};
       S.employees.push(e);
-    }
+    }else if(+src.lim){ e.lim=lim; }
     (src.days||[]).forEach(function(k){
       if(/^\d{4}-\d{2}-\d{2}$/.test(k)&&!e.days.has(k)){e.days.add(k);added++;}
     });
@@ -1110,7 +1323,7 @@ function findOrCreate(name){
   if(!name) return null;
   var e=S.employees.filter(function(x){return x.name.toLowerCase()===name.toLowerCase();})[0];
   if(e) return e;
-  e={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name.slice(0,64),color:nextColor(),days:new Set()};
+  e={id:'e'+Date.now().toString(36)+Math.random().toString(36).slice(2,5),name:name.slice(0,64),color:nextColor(),g:S.group,lim:S.limit,days:new Set()};
   S.employees.push(e);
   return e;
 }
@@ -1177,13 +1390,13 @@ function sameSet(a,b){
 function snapshotLocal(){
   var snap={people:{},days:{}};
   S.employees.forEach(function(e){
-    snap.people[e.id]=e.name+'|'+e.color;
+    snap.people[e.id]=e.name+'|'+e.color+'|'+(e.g||'g1')+'|'+(+e.lim||S.limit);
     snap.days[e.id]=toSet(Array.from(e.days));
   });
   return snap;
 }
 function peoplePayload(){
-  return S.employees.map(function(e){return {id:e.id,name:e.name,color:e.color};});
+  return S.employees.map(function(e){return {id:e.id,name:e.name,color:e.color,g:e.g||'g1',lim:+e.lim||S.limit};});
 }
 function scheduleSync(){
   if(!syncOn()) return;
@@ -1263,13 +1476,21 @@ function syncPull(){
       if(Array.isArray(data.people)&&data.people.length){
         data.people.forEach(function(x){
           if(!x||!x.id) return;
+          var gid=x.g?String(x.g):'g1', lim=+x.lim||0;
           var e=S.employees.filter(function(y){return y.id===x.id;})[0];
           if(!e){
-            S.employees.push({id:x.id,name:x.name||'Без имени',color:x.color||nextColor(),days:new Set()});
+            if(x.g&&!S.groups.some(function(g){return g.id===gid;})) S.groups.push({id:gid,name:'Группа '+gid});
+            S.employees.push({id:x.id,name:x.name||'Без имени',color:x.color||nextColor(),g:gid,lim:lim||S.limit,days:new Set()});
             changed=true;
-          }else if(x.name&&x.name!==e.name){ e.name=x.name; changed=true; }
+          }else{
+            if(x.name&&x.name!==e.name){ e.name=x.name; changed=true; }
+            if(x.color&&x.color!==e.color){ e.color=x.color; changed=true; }
+            if(x.g&&x.g!==e.g){ e.g=gid; changed=true; }
+            if(lim&&lim!==e.lim){ e.lim=lim; changed=true; }
+          }
         });
         SYNC.peopleJson=JSON.stringify(data.people);
+        ensureGroups(S);
       }
       var days=data.days||{}, now=Date.now();
       S.employees.forEach(function(e){
@@ -1339,10 +1560,22 @@ mainEl.addEventListener('click',function(ev){
   }else if(act==='clearEmp'){
     var e=activeEmp(); if(!e) return;
     var n=0;
-    Array.from(e.days).forEach(function(k){ if(k.indexOf(S.year+'-')===0){e.days.delete(k);n++;} });
-    save(); render(); toast(n?('Снято дней: '+n):'Было пусто');
+    e.days.forEach(function(k){ if(k.indexOf(S.year+'-')===0) n++; });
+    if(!n){ toast('Было пусто'); return; }
+    askConfirm('Снять все дни у «'+e.name+'»? Отмечено '+n+'. Это сразу разойдётся всем.',function(){
+      var kill=[];
+      e.days.forEach(function(k){ if(k.indexOf(S.year+'-')===0) kill.push(k); });
+      kill.forEach(function(k){ e.days.delete(k); });
+      save(); render(); toast('Снято дней: '+kill.length);
+    },null,'Снять');
   }else if(act==='req'){
     copyText(requestText());
+  }else if(act==='editlim'){
+    openPeople();
+    setTimeout(function(){
+      var row=document.querySelector('#peopleList .prow[data-id="'+t.dataset.id+'"] .pdays');
+      if(row){row.focus();row.select();}
+    },90);
   }else if(act==='rmperiod'){
     removePeriod(t.dataset.a);
   }else if(act==='goperiod'){
@@ -1363,6 +1596,13 @@ mainEl.addEventListener('click',function(ev){
   }
 });
 
+document.getElementById('gbar').addEventListener('click',function(ev){
+  var b=ev.target.closest('.gpill');
+  if(!b) return;
+  var id=b.dataset.gid;
+  if(id===S.group) return;
+  setGroup(id);
+});
 document.getElementById('tabs').addEventListener('click',function(ev){
   var b=ev.target.closest('.tab');
   if(!b) return;
@@ -1374,10 +1614,11 @@ document.getElementById('yearSel').addEventListener('change',function(ev){
   S.year=+ev.target.value; save(); render();
 });
 document.getElementById('btnPeople').addEventListener('click',openPeople);
-document.getElementById('btnData').addEventListener('click',function(){
+function openData(){
   document.getElementById('importIn').value='';
   showDlg(document.getElementById('dlgData'));
-});
+}
+document.getElementById('btnData').addEventListener('click',openData);
 document.getElementById('btnCopyReq').addEventListener('click',function(){copyText(requestText());});
 document.getElementById('btnCopyLink').addEventListener('click',function(){
   var l=shareLink();
@@ -1400,11 +1641,11 @@ document.getElementById('btnSync').addEventListener('click',function(){
   syncPull();
 });
 document.getElementById('btnReset').addEventListener('click',function(){
-  if(!confirm('Заменить всё текущее содержимое планом из файла «Отпуска ГКС 1 — 2027»? В общем режиме это перезапишет график у всех.')) return;
-  S=seed(); save();
   document.getElementById('dlgData').close();
-  render();
-  toast('План восстановлен');
+  askConfirm('Заменить всё планом из файла «Отпуска ГКС 1 — 2027» и второй группой? В общем режиме это перезапишет график у всех.',function(){
+    S=seed(); save(); render();
+    toast('План восстановлен');
+  },openData,'Заменить');
 });
 document.getElementById('btnImport').addEventListener('click',function(){
   var r=parseImport(document.getElementById('importIn').value);
@@ -1445,11 +1686,16 @@ function applyHash(){
 function init(){
   buildYears();
   S=load();
+  var mig=false;
   if(!S){ S=seed(); save(); }
-  if(!S.active||!S.employees.some(function(e){return e.id===S.active;})) S.active=(S.employees[0]&&S.employees[0].id)||null;
+  else if(!localStorage.getItem(KEY)){ mig=true; save(true); }
+  ensureGroups(S);
+  if(dropEmptyGroups(S)) save(true);
+  if(!S.active||!groupPpl().some(function(e){return e.id===S.active;})) S.active=(groupPpl()[0]&&groupPpl()[0].id)||null;
   applyHash();
   render();
   syncInit();
+  if(mig&&syncOn()){ SYNC.peopleJson=''; scheduleSync(); }
 }
 init();
 

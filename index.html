@@ -1151,7 +1151,7 @@ function parseImport(text){
 /* ── общий режим (синхронизация) ─────────────────────── */
 var SYNC_OVERRIDE='https://otpusk-dd079-default-rtdb.asia-southeast1.firebasedatabase.app';                      /* адрес можно вписать сюда, чтобы он был у всех */
 var SYNC_KEY='vacgraph.sync';
-var SYNC={snap:null,timer:null,ok:false,err:false,busy:0,peopleJson:'',lastUpdated:null,localAt:0,poll:null};
+var SYNC={snap:null,timer:null,ok:false,err:false,busy:0,peopleJson:'',lastUpdated:null,localAt:0,poll:null,pend:{}};
 
 function syncUrl(){
   var u='';
@@ -1198,8 +1198,8 @@ function syncFlush(){
   var cur=snapshotLocal(), snap=SYNC.snap, tasks=[];
   S.employees.forEach(function(e){
     var a=cur.days[e.id]||new Set(), b=snap.days[e.id]||new Set();
-    a.forEach(function(k){ if(!b.has(k)) tasks.push({m:'PUT',u:'/data/days/'+e.id+'/'+k+'.json',b:'true'}); });
-    b.forEach(function(k){ if(!a.has(k)) tasks.push({m:'DELETE',u:'/data/days/'+e.id+'/'+k+'.json'}); });
+    a.forEach(function(k){ if(!b.has(k)){ tasks.push({m:'PUT',u:'/data/days/'+e.id+'/'+k+'.json',b:'true',e:e.id,d:k,v:1}); SYNC.pend[e.id+'|'+k]={e:e.id,d:k,v:1,t:Date.now()}; } });
+    b.forEach(function(k){ if(!a.has(k)){ tasks.push({m:'DELETE',u:'/data/days/'+e.id+'/'+k+'.json',e:e.id,d:k,v:0}); SYNC.pend[e.id+'|'+k]={e:e.id,d:k,v:0,t:Date.now()}; } });
   });
   var pj=JSON.stringify(peoplePayload());
   if(pj!==SYNC.peopleJson){
@@ -1218,6 +1218,7 @@ function syncFlush(){
       });
   })).then(function(){
     SYNC.busy--; SYNC.ok=true; SYNC.err=false; syncDot();
+    tasks.forEach(function(t){ if(t.e){ delete SYNC.pend[t.e+'|'+t.d]; } });
     bumpUpdated().catch(function(){});
   }).catch(function(){
     SYNC.busy--; SYNC.err=true; SYNC.ok=false; SYNC.snap=prevSnap; syncDot();
@@ -1257,7 +1258,6 @@ function syncPull(){
     }).then(function(data){
       if(!data||!data.people||!data.people.length){ syncSeed(); return; }
       SYNC.ok=true; SYNC.err=false; syncDot();
-      if(Date.now()-(SYNC.localAt||0)<3500) return;
       if(ts) SYNC.lastUpdated=ts;
       var changed=false;
       if(Array.isArray(data.people)&&data.people.length){
@@ -1271,9 +1271,15 @@ function syncPull(){
         });
         SYNC.peopleJson=JSON.stringify(data.people);
       }
-      var days=data.days||{};
+      var days=data.days||{}, now=Date.now();
       S.employees.forEach(function(e){
         var remote=toSet(Object.keys(days[e.id]||{}));
+        for(var key in SYNC.pend){
+          var p=SYNC.pend[key];
+          if(!p||p.e!==e.id) continue;
+          if(now-p.t>6000){ delete SYNC.pend[key]; continue; }
+          if(p.v) remote.add(p.d); else remote.delete(p.d);
+        }
         if(!sameSet(remote,e.days)){ e.days=remote; changed=true; }
       });
       SYNC.snap=snapshotLocal();
@@ -1287,7 +1293,6 @@ function bumpUpdated(){
   var base=syncUrl();
   if(!base) return Promise.resolve();
   var ts=Date.now();
-  SYNC.lastUpdated=ts;
   return fetch(base+'/updated.json',{method:'PUT',headers:{'Content-Type':'application/json'},
     body:String(ts),cache:'no-store'}).then(function(r){
     if(!r.ok) throw new Error('HTTP '+r.status);
@@ -1297,6 +1302,7 @@ function syncInit(){
   syncDot();
   if(!syncOn()) return;
   if(!SYNC.snap) SYNC.snap=snapshotLocal();
+  if(!SYNC.peopleJson) SYNC.peopleJson=JSON.stringify(peoplePayload());
   syncPull();
   SYNC.busy=0;
   clearInterval(SYNC.poll);
